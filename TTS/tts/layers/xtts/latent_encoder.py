@@ -29,7 +29,7 @@ def normalization(channels):
     elif channels <= 64:
         groups = 16
     while channels % groups != 0:
-        groups = int(groups / 2)
+        groups //= 2
     assert groups > 2
     return GroupNorm32(groups, channels)
 
@@ -125,10 +125,11 @@ class ConditioningEncoder(nn.Module):
         num_attn_heads=4,
     ):
         super().__init__()
-        attn = []
         self.init = nn.Conv1d(spec_dim, embedding_dim, kernel_size=1)
-        for a in range(attn_blocks):
-            attn.append(AttentionBlock(embedding_dim, num_attn_heads))
+        attn = [
+            AttentionBlock(embedding_dim, num_attn_heads)
+            for _ in range(attn_blocks)
+        ]
         self.attn = nn.Sequential(*attn)
         self.dim = embedding_dim
 

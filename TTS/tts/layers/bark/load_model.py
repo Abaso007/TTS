@@ -96,10 +96,7 @@ def load_model(ckpt_path, device, config, model_type="text"):
 
     if device == "cpu":
         logger.warning("No GPU being used. Careful, Inference might be extremely slow!")
-    if model_type == "text":
-        ConfigClass = GPTConfig
-        ModelClass = GPT
-    elif model_type == "coarse":
+    if model_type in ["text", "coarse"]:
         ConfigClass = GPTConfig
         ModelClass = GPT
     elif model_type == "fine":
@@ -127,13 +124,13 @@ def load_model(ckpt_path, device, config, model_type="text"):
         del model_args["vocab_size"]
 
     gptconf = ConfigClass(**checkpoint["model_args"])
-    if model_type == "text":
-        config.semantic_config = gptconf
-    elif model_type == "coarse":
+    if model_type == "coarse":
         config.coarse_config = gptconf
     elif model_type == "fine":
         config.fine_config = gptconf
 
+    elif model_type == "text":
+        config.semantic_config = gptconf
     model = ModelClass(gptconf)
     state_dict = checkpoint["model"]
     # fixup checkpoint
@@ -142,12 +139,12 @@ def load_model(ckpt_path, device, config, model_type="text"):
         if k.startswith(unwanted_prefix):
             state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
     extra_keys = set(state_dict.keys()) - set(model.state_dict().keys())
-    extra_keys = set(k for k in extra_keys if not k.endswith(".attn.bias"))
+    extra_keys = {k for k in extra_keys if not k.endswith(".attn.bias")}
     missing_keys = set(model.state_dict().keys()) - set(state_dict.keys())
-    missing_keys = set(k for k in missing_keys if not k.endswith(".attn.bias"))
-    if len(extra_keys) != 0:
+    missing_keys = {k for k in missing_keys if not k.endswith(".attn.bias")}
+    if extra_keys:
         raise ValueError(f"extra keys found: {extra_keys}")
-    if len(missing_keys) != 0:
+    if missing_keys:
         raise ValueError(f"missing keys: {missing_keys}")
     model.load_state_dict(state_dict, strict=False)
     n_params = model.get_num_params()

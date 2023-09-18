@@ -77,7 +77,7 @@ def load_voice(model, voice: str, extra_voice_dirs: List[str] = []):  # pylint: 
 
     audio_path = paths[0]
     # replace the file extension with .npz
-    output_path = os.path.splitext(audio_path)[0] + ".npz"
+    output_path = f"{os.path.splitext(audio_path)[0]}.npz"
     generate_voice(audio=audio_path, model=model, output_path=output_path)
     return load_voice(model, voice, extra_voice_dirs)
 
@@ -98,8 +98,9 @@ def compute_average_bass_energy(audio_data, sample_rate, max_bass_freq=250):
     power_spectrogram = np.abs(stft) ** 2
     frequencies = librosa.fft_frequencies(sr=sample_rate, n_fft=stft.shape[0])
     bass_mask = frequencies <= max_bass_freq
-    bass_energy = power_spectrogram[np.ix_(bass_mask, np.arange(power_spectrogram.shape[1]))].mean()
-    return bass_energy
+    return power_spectrogram[
+        np.ix_(bass_mask, np.arange(power_spectrogram.shape[1]))
+    ].mean()
 
 
 def generate_voice(
@@ -237,10 +238,7 @@ def generate_text_semantic(
         tot_generated_duration_s = 0
         kv_cache = None
         for n in range(n_tot_steps):
-            if use_kv_caching and kv_cache is not None:
-                x_input = x[:, [-1]]
-            else:
-                x_input = x
+            x_input = x[:, [-1]] if use_kv_caching and kv_cache is not None else x
             logits, kv_cache = model.semantic_model(
                 x_input, merge_context=True, use_cache=use_kv_caching, past_kv=kv_cache
             )
@@ -300,8 +298,7 @@ def _flatten_codebooks(arr, offset_size):
     if offset_size is not None:
         for n in range(1, arr.shape[0]):
             arr[n, :] += offset_size * n
-    flat_arr = arr.ravel("F")
-    return flat_arr
+    return arr.ravel("F")
 
 
 def generate_coarse(
@@ -348,7 +345,7 @@ def generate_coarse(
         model.config.COARSE_RATE_HZ / model.config.SEMANTIC_RATE_HZ * model.config.N_COARSE_CODEBOOKS
     )
     max_semantic_history = int(np.floor(max_coarse_history / semantic_to_coarse_ratio))
-    if all(v is not None for v in history_prompt) or base is not None:
+    if all(v is not None for v in history_prompt):
         if history_prompt is not None:
             x_history = history_prompt
             x_semantic_history = x_history[0]
@@ -356,6 +353,46 @@ def generate_coarse(
         if base is not None:
             x_semantic_history = base[0]
             x_coarse_history = base[1]
+        assert (
+            isinstance(x_semantic_history, np.ndarray)
+            and len(x_semantic_history.shape) == 1
+            and len(x_semantic_history) > 0
+            and x_semantic_history.min() >= 0
+            and x_semantic_history.max() <= model.config.SEMANTIC_VOCAB_SIZE - 1
+            and isinstance(x_coarse_history, np.ndarray)
+            and len(x_coarse_history.shape) == 2
+            and x_coarse_history.shape[0] == model.config.N_COARSE_CODEBOOKS
+            and x_coarse_history.shape[-1] >= 0
+            and x_coarse_history.min() >= 0
+            and x_coarse_history.max() <= model.config.CODEBOOK_SIZE - 1
+            and (
+                round(x_coarse_history.shape[-1] / len(x_semantic_history), 1)
+                == round(semantic_to_coarse_ratio / model.config.N_COARSE_CODEBOOKS, 1)
+            )
+        )
+        x_coarse_history = (
+            _flatten_codebooks(x_coarse_history, model.config.CODEBOOK_SIZE) + model.config.SEMANTIC_VOCAB_SIZE
+        )
+        # trim histories correctly
+        n_semantic_hist_provided = np.min(
+            [
+                max_semantic_history,
+                len(x_semantic_history) - len(x_semantic_history) % 2,
+                int(np.floor(len(x_coarse_history) / semantic_to_coarse_ratio)),
+            ]
+        )
+        n_coarse_hist_provided = int(round(n_semantic_hist_provided * semantic_to_coarse_ratio))
+        x_semantic_history = x_semantic_history[-n_semantic_hist_provided:].astype(np.int32)
+        x_coarse_history = x_coarse_history[-n_coarse_hist_provided:].astype(np.int32)
+        # TODO: bit of a hack for time alignment (sounds better)
+        x_coarse_history = x_coarse_history[:-2]
+    elif base is not None:
+        if history_prompt is not None:
+            x_history = history_prompt
+            x_semantic_history = x_history[0]
+            x_coarse_history = x_history[1]
+        x_semantic_history = base[0]
+        x_coarse_history = base[1]
         assert (
             isinstance(x_semantic_history, np.ndarray)
             and len(x_semantic_history.shape) == 1
@@ -432,11 +469,7 @@ def generate_coarse(
                     continue
                 is_major_step = n_step % model.config.N_COARSE_CODEBOOKS == 0
 
-                if use_kv_caching and kv_cache is not None:
-                    x_input = x_in[:, [-1]]
-                else:
-                    x_input = x_in
-
+                x_input = x_in[:, [-1]] if use_kv_caching and kv_cache is not None else x_in
                 logits, kv_cache = model.coarse_model(x_input, use_cache=use_kv_caching, past_kv=kv_cache)
                 logit_start_idx = (
                     model.config.SEMANTIC_VOCAB_SIZE + (1 - int(is_major_step)) * model.config.CODEBOOK_SIZE
@@ -602,5 +635,4 @@ def codec_decode(fine_tokens, model):
     arr = arr.transpose(0, 1)
     emb = model.encodec.quantizer.decode(arr)
     out = model.encodec.decoder(emb)
-    audio_arr = out.detach().cpu().numpy().squeeze()
-    return audio_arr
+    return out.detach().cpu().numpy().squeeze()

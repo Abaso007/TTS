@@ -205,8 +205,7 @@ class AcousticModel(torch.nn.Module):
         if speaker_ids is not None and not hasattr(self, "emb_g"):
             raise ValueError("[!] Cannot use speaker-ids without enabling speaker embedding.")
 
-        g = speaker_ids if speaker_ids is not None else d_vectors
-        return g
+        return speaker_ids if speaker_ids is not None else d_vectors
 
     # def set_embedding_dims(self):
     #     if self.embedded_speaker_dim > 0:
@@ -248,8 +247,7 @@ class AcousticModel(torch.nn.Module):
             y_lengths[y_lengths < 1] = 1
             y_mask = torch.unsqueeze(sequence_mask(y_lengths, None), 1).to(dr.dtype)
         attn_mask = torch.unsqueeze(x_mask, -1) * torch.unsqueeze(y_mask, 2)
-        attn = generate_path(dr, attn_mask.squeeze(1)).to(dr.dtype)
-        return attn
+        return generate_path(dr, attn_mask.squeeze(1)).to(dr.dtype)
 
     def _expand_encoder_with_durations(
         self,
@@ -551,7 +549,7 @@ class AcousticModel(torch.nn.Module):
             encoding=encoding,
         )
         x = self.to_mel(x)
-        outputs = {
+        return {
             "model_outputs": x,
             "alignments": alignments,
             # "pitch": pitch_emb_pred,
@@ -560,4 +558,3 @@ class AcousticModel(torch.nn.Module):
             "energy": energy_pred,
             "spk_emb": speaker_embedding,
         }
-        return outputs

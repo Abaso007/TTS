@@ -19,8 +19,7 @@ def read_json_with_comments(json_path):
     # handle comments
     input_str = re.sub(r"\\\n", "", input_str)
     input_str = re.sub(r"//.*\n", "\n", input_str)
-    data = json.loads(input_str)
-    return data
+    return json.loads(input_str)
 
 
 def register_config(model_name: str) -> Coqpit:
@@ -36,7 +35,7 @@ def register_config(model_name: str) -> Coqpit:
         Coqpit: config class.
     """
     config_class = None
-    config_name = model_name + "_config"
+    config_name = f"{model_name}_config"
 
     # TODO: fix this
     if model_name == "xtts":
@@ -95,7 +94,7 @@ def load_config(config_path: str) -> Coqpit:
             data = read_json_with_comments(config_path)
     else:
         raise TypeError(f" [!] Unknown config file type {ext}")
-    config_dict.update(data)
+    config_dict |= data
     model_name = _process_model_name(config_dict)
     config_class = register_config(model_name.lower())
     config = config_class()
@@ -115,9 +114,7 @@ def check_config_and_model_args(config, arg_name, value):
     if hasattr(config, "model_args"):
         if arg_name in config.model_args:
             return config.model_args[arg_name] == value
-    if hasattr(config, arg_name):
-        return config[arg_name] == value
-    return False
+    return config[arg_name] == value if hasattr(config, arg_name) else False
 
 
 def get_from_config_or_model_args(config, arg_name):
@@ -133,6 +130,4 @@ def get_from_config_or_model_args_with_default(config, arg_name, def_val):
     if hasattr(config, "model_args"):
         if arg_name in config.model_args:
             return config.model_args[arg_name]
-    if hasattr(config, arg_name):
-        return config[arg_name]
-    return def_val
+    return config[arg_name] if hasattr(config, arg_name) else def_val

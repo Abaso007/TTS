@@ -147,7 +147,7 @@ class DiscretizationLoss(nn.Module):
             self.record_past = False
 
     def forward(self, x):
-        other_dims = set(range(len(x.shape))) - set([self.dim])
+        other_dims = set(range(len(x.shape))) - {self.dim}
         averaged = x.sum(dim=tuple(other_dims)) / x.sum()
         averaged = averaged - averaged.mean()
 
@@ -186,7 +186,7 @@ class ResBlock(nn.Module):
 class UpsampledConv(nn.Module):
     def __init__(self, conv, *args, **kwargs):
         super().__init__()
-        assert "stride" in kwargs.keys()
+        assert "stride" in kwargs
         self.stride = kwargs["stride"]
         del kwargs["stride"]
         self.conv = conv(*args, **kwargs)
@@ -303,7 +303,7 @@ class DiscreteVAE(nn.Module):
         self.internal_step = 0
 
     def norm(self, images):
-        if not self.normalization is not None:
+        if self.normalization is None:
             return images
 
         means, stds = map(lambda t: torch.as_tensor(t).to(images), self.normalization)
@@ -346,8 +346,7 @@ class DiscreteVAE(nn.Module):
             kwargs = {"h": h, "w": w}
         image_embeds = rearrange(image_embeds, arrange, **kwargs)
         images = [image_embeds]
-        for layer in self.decoder:
-            images.append(layer(images[-1]))
+        images.extend(layer(images[-1]) for layer in self.decoder)
         return images[-1], images[-2]
 
     def infer(self, img):

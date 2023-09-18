@@ -95,9 +95,7 @@ class NoiseScheduleVP:
 
         if schedule not in ["discrete", "linear", "cosine"]:
             raise ValueError(
-                "Unsupported noise schedule {}. The schedule needs to be 'discrete' or 'linear' or 'cosine'".format(
-                    schedule
-                )
+                f"Unsupported noise schedule {schedule}. The schedule needs to be 'discrete' or 'linear' or 'cosine'"
             )
 
         self.schedule = schedule
@@ -131,12 +129,7 @@ class NoiseScheduleVP:
             )
             self.cosine_log_alpha_0 = math.log(math.cos(self.cosine_s / (1.0 + self.cosine_s) * math.pi / 2.0))
             self.schedule = schedule
-            if schedule == "cosine":
-                # For the cosine schedule, T = 1 will have numerical issues. So we manually set the ending time T.
-                # Note that T = 0.9946 may be not the optimal setting. However, we find it works well.
-                self.T = 0.9946
-            else:
-                self.T = 1.0
+            self.T = 0.9946 if schedule == "cosine" else 1.0
 
     def marginal_log_mean_coeff(self, t):
         """
@@ -365,12 +358,11 @@ def model_wrapper(
         elif guidance_type == "classifier-free":
             if guidance_scale == 1.0 or unconditional_condition is None:
                 return noise_pred_fn(x, t_continuous, cond=condition)
-            else:
-                x_in = torch.cat([x] * 2)
-                t_in = torch.cat([t_continuous] * 2)
-                c_in = torch.cat([unconditional_condition, condition])
-                noise_uncond, noise = noise_pred_fn(x_in, t_in, cond=c_in).chunk(2)
-                return noise_uncond + guidance_scale * (noise - noise_uncond)
+            x_in = torch.cat([x] * 2)
+            t_in = torch.cat([t_continuous] * 2)
+            c_in = torch.cat([unconditional_condition, condition])
+            noise_uncond, noise = noise_pred_fn(x_in, t_in, cond=c_in).chunk(2)
+            return noise_uncond + guidance_scale * (noise - noise_uncond)
 
     assert model_type in ["noise", "x_start", "v", "score"]
     assert guidance_type in ["uncond", "classifier", "classifier-free"]
@@ -520,11 +512,16 @@ class DPM_Solver:
             return torch.linspace(t_T, t_0, N + 1).to(device)
         elif skip_type == "time_quadratic":
             t_order = 2
-            t = torch.linspace(t_T ** (1.0 / t_order), t_0 ** (1.0 / t_order), N + 1).pow(t_order).to(device)
-            return t
+            return (
+                torch.linspace(
+                    t_T ** (1.0 / t_order), t_0 ** (1.0 / t_order), N + 1
+                )
+                .pow(t_order)
+                .to(device)
+            )
         else:
             raise ValueError(
-                "Unsupported skip_type {}, need to be 'logSNR' or 'time_uniform' or 'time_quadratic'".format(skip_type)
+                f"Unsupported skip_type {skip_type}, need to be 'logSNR' or 'time_uniform' or 'time_quadratic'"
             )
 
     def get_orders_and_timesteps_for_singlestep_solver(self, steps, order, skip_type, t_T, t_0, device):
@@ -649,19 +646,12 @@ class DPM_Solver:
             if model_s is None:
                 model_s = self.model_fn(x, s)
             x_t = sigma_t / sigma_s * x - alpha_t * phi_1 * model_s
-            if return_intermediate:
-                return x_t, {"model_s": model_s}
-            else:
-                return x_t
         else:
             phi_1 = torch.expm1(h)
             if model_s is None:
                 model_s = self.model_fn(x, s)
             x_t = torch.exp(log_alpha_t - log_alpha_s) * x - (sigma_t * phi_1) * model_s
-            if return_intermediate:
-                return x_t, {"model_s": model_s}
-            else:
-                return x_t
+        return (x_t, {"model_s": model_s}) if return_intermediate else x_t
 
     def singlestep_dpm_solver_second_update(
         self,
@@ -690,7 +680,9 @@ class DPM_Solver:
             x_t: A pytorch tensor. The approximated solution at time `t`.
         """
         if solver_type not in ["dpmsolver", "taylor"]:
-            raise ValueError("'solver_type' must be either 'dpmsolver' or 'taylor', got {}".format(solver_type))
+            raise ValueError(
+                f"'solver_type' must be either 'dpmsolver' or 'taylor', got {solver_type}"
+            )
         if r1 is None:
             r1 = 0.5
         ns = self.noise_schedule
@@ -787,7 +779,9 @@ class DPM_Solver:
             x_t: A pytorch tensor. The approximated solution at time `t`.
         """
         if solver_type not in ["dpmsolver", "taylor"]:
-            raise ValueError("'solver_type' must be either 'dpmsolver' or 'taylor', got {}".format(solver_type))
+            raise ValueError(
+                f"'solver_type' must be either 'dpmsolver' or 'taylor', got {solver_type}"
+            )
         if r1 is None:
             r1 = 1.0 / 3.0
         if r2 is None:
@@ -910,7 +904,9 @@ class DPM_Solver:
             x_t: A pytorch tensor. The approximated solution at time `t`.
         """
         if solver_type not in ["dpmsolver", "taylor"]:
-            raise ValueError("'solver_type' must be either 'dpmsolver' or 'taylor', got {}".format(solver_type))
+            raise ValueError(
+                f"'solver_type' must be either 'dpmsolver' or 'taylor', got {solver_type}"
+            )
         ns = self.noise_schedule
         model_prev_1, model_prev_0 = model_prev_list[-2], model_prev_list[-1]
         t_prev_1, t_prev_0 = t_prev_list[-2], t_prev_list[-1]
@@ -992,7 +988,7 @@ class DPM_Solver:
             phi_1 = torch.expm1(-h)
             phi_2 = phi_1 / h + 1.0
             phi_3 = phi_2 / h - 0.5
-            x_t = (
+            return (
                 (sigma_t / sigma_prev_0) * x
                 - (alpha_t * phi_1) * model_prev_0
                 + (alpha_t * phi_2) * D1
@@ -1002,13 +998,12 @@ class DPM_Solver:
             phi_1 = torch.expm1(h)
             phi_2 = phi_1 / h - 1.0
             phi_3 = phi_2 / h - 0.5
-            x_t = (
+            return (
                 (torch.exp(log_alpha_t - log_alpha_prev_0)) * x
                 - (sigma_t * phi_1) * model_prev_0
                 - (sigma_t * phi_2) * D1
                 - (sigma_t * phi_3) * D2
             )
-        return x_t
 
     def singlestep_dpm_solver_update(
         self,
@@ -1059,7 +1054,7 @@ class DPM_Solver:
                 r2=r2,
             )
         else:
-            raise ValueError("Solver order must be 1 or 2 or 3, got {}".format(order))
+            raise ValueError(f"Solver order must be 1 or 2 or 3, got {order}")
 
     def multistep_dpm_solver_update(self, x, model_prev_list, t_prev_list, t, order, solver_type="dpmsolver"):
         """
@@ -1083,7 +1078,7 @@ class DPM_Solver:
         elif order == 3:
             return self.multistep_dpm_solver_third_update(x, model_prev_list, t_prev_list, t, solver_type=solver_type)
         else:
-            raise ValueError("Solver order must be 1 or 2 or 3, got {}".format(order))
+            raise ValueError(f"Solver order must be 1 or 2 or 3, got {order}")
 
     def dpm_solver_adaptive(
         self,
@@ -1189,10 +1184,7 @@ class DPM_Solver:
             noise = torch.randn((t.shape[0], *x.shape), device=x.device)
         x = x.reshape((-1, *x.shape))
         xt = expand_dims(alpha_t, x.dim()) * x + expand_dims(sigma_t, x.dim()) * noise
-        if t.shape[0] == 1:
-            return xt.squeeze(0)
-        else:
-            return xt
+        return xt.squeeze(0) if t.shape[0] == 1 else xt
 
     def inverse(
         self,
@@ -1484,7 +1476,7 @@ class DPM_Solver:
                     if return_intermediate:
                         intermediates.append(x)
             else:
-                raise ValueError("Got wrong method {}".format(method))
+                raise ValueError(f"Got wrong method {method}")
             if denoise_to_zero:
                 t = torch.ones((1,)).to(device) * t_0
                 x = self.denoise_to_zero_fn(x, t)
@@ -1492,10 +1484,7 @@ class DPM_Solver:
                     x = self.correcting_xt_fn(x, t, step + 1)
                 if return_intermediate:
                     intermediates.append(x)
-        if return_intermediate:
-            return x, intermediates
-        else:
-            return x
+        return (x, intermediates) if return_intermediate else x
 
 
 #############################################################
@@ -1545,8 +1534,7 @@ def interpolate_fn(x, xp, yp):
     y_positions_expanded = yp.unsqueeze(0).expand(N, -1, -1)
     start_y = torch.gather(y_positions_expanded, dim=2, index=start_idx2.unsqueeze(2)).squeeze(2)
     end_y = torch.gather(y_positions_expanded, dim=2, index=(start_idx2 + 1).unsqueeze(2)).squeeze(2)
-    cand = start_y + (x - start_x) * (end_y - start_y) / (end_x - start_x)
-    return cand
+    return start_y + (x - start_x) * (end_y - start_y) / (end_x - start_x)
 
 
 def expand_dims(v, dims):

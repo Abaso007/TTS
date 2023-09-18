@@ -29,11 +29,10 @@ class LearnedPositionEmbeddings(nn.Module):
 
     def forward(self, x):
         sl = x.shape[1]
-        if self.relative:
-            start = random.randint(sl, self.seq_len) - sl
-            return self.emb(torch.arange(start, start + sl, device=x.device))
-        else:
+        if not self.relative:
             return self.emb(torch.arange(0, sl, device=x.device))
+        start = random.randint(sl, self.seq_len) - sl
+        return self.emb(torch.arange(start, start + sl, device=x.device))
 
     def get_fixed_embedding(self, ind, dev):
         return self.emb(torch.tensor([ind], device=dev)).unsqueeze(0)
@@ -273,9 +272,10 @@ class GPT(nn.Module):
             if len(speech_conditioning_input.shape) == 3
             else speech_conditioning_input
         )
-        conds = []
-        for j in range(speech_conditioning_input.shape[1]):
-            conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+        conds = [
+            self.conditioning_encoder(speech_conditioning_input[:, j])
+            for j in range(speech_conditioning_input.shape[1])
+        ]
         conds = torch.stack(conds, dim=1)
         conds = conds.mean(dim=1)
         return conds
@@ -298,9 +298,7 @@ class GPT(nn.Module):
                         length += 1
                 lengths.append(length)
 
-            # prompt_len = random.randint(1, 9)  # in secs
-            prompt_len = 3
-            prompt_len = prompt_len * 24  # in frames
+            prompt_len = 3 * 24
             if prompt_codes.shape[-1] >= prompt_len:
                 new_prompt = []
                 for i in range(prompt_codes.shape[0]):
@@ -456,11 +454,7 @@ class GPT(nn.Module):
         if cond_latents is None:
             cond_latents = self.get_style_emb(cond_mels, cond_lens).transpose(1, 2)
 
-        # Get logits
-        sub = -5  # don't ask me why 😄
-        if self.training:
-            sub = -1
-
+        sub = -1 if self.training else -5
         text_logits, mel_logits = self.get_logits(
             text_emb,
             self.text_head,

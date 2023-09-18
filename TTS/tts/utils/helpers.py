@@ -141,8 +141,9 @@ def average_over_durations(values, durs):
     values_sums = (torch.gather(values_cums, 2, dce) - torch.gather(values_cums, 2, dcs)).float()
     values_nelems = (torch.gather(values_nonzero_cums, 2, dce) - torch.gather(values_nonzero_cums, 2, dcs)).float()
 
-    avg = torch.where(values_nelems == 0.0, values_nelems, values_sums / values_nelems)
-    return avg
+    return torch.where(
+        values_nelems == 0.0, values_nelems, values_sums / values_nelems
+    )
 
 
 def convert_pad_shape(pad_shape):
@@ -250,9 +251,8 @@ def beta_binomial_prior_distribution(phoneme_count, mel_count, scaling_factor=1.
 
 def compute_attn_prior(x_len, y_len, scaling_factor=1.0):
     """Compute attention priors for the alignment network."""
-    attn_prior = beta_binomial_prior_distribution(
+    return beta_binomial_prior_distribution(
         x_len,
         y_len,
         scaling_factor,
     )
-    return attn_prior  # [y_len, x_len]

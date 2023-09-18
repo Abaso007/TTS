@@ -101,7 +101,7 @@ class Wav2VecAlignment:
                     break
 
         pop_till_you_win()
-        if not (len(expected_tokens) == 0 and len(alignments) == len(expected_text)):
+        if len(expected_tokens) != 0 or len(alignments) != len(expected_text):
             torch.save([audio, expected_text], "alignment_debug.pth")
             assert False, (
                 "Something went wrong with the alignment algorithm. I've dumped a file, 'alignment_debug.pth' to"

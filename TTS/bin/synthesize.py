@@ -393,10 +393,7 @@ If you don't specify any models, then it uses LJSpeech based English model.
         encoder_path = args.encoder_path
         encoder_config_path = args.encoder_config_path
 
-    device = args.device
-    if args.use_cuda:
-        device = "cuda"
-
+    device = "cuda" if args.use_cuda else args.device
     # load models
     synthesizer = Synthesizer(
         tts_path,
@@ -439,7 +436,7 @@ If you don't specify any models, then it uses LJSpeech based English model.
 
     # RUN THE SYNTHESIS
     if args.text:
-        print(" > Text: {}".format(args.text))
+        print(f" > Text: {args.text}")
 
     # kick it
     if tts_path is not None:
@@ -464,7 +461,7 @@ If you don't specify any models, then it uses LJSpeech based English model.
         )
 
     # save the results
-    print(" > Saving output to {}".format(args.out_path))
+    print(f" > Saving output to {args.out_path}")
     synthesizer.save_wav(wav, args.out_path)
 
 

@@ -398,8 +398,7 @@ class Tortoise(BaseTTS):
         if self.high_vram:
             yield model
         else:
-            m = model.to(self.device)
-            yield m
+            yield model.to(self.device)
             m = model.cpu()
 
     def get_conditioning_latents(
@@ -428,9 +427,12 @@ class Tortoise(BaseTTS):
         with torch.no_grad():
             voice_samples = [[v.to(self.device) for v in ls] for ls in voice_samples]
 
-            auto_conds = []
-            for ls in voice_samples:
-                auto_conds.append(format_conditioning(ls[0], device=self.device, mel_norm_file=self.mel_norm_path))
+            auto_conds = [
+                format_conditioning(
+                    ls[0], device=self.device, mel_norm_file=self.mel_norm_path
+                )
+                for ls in voice_samples
+            ]
             auto_conds = torch.stack(auto_conds, dim=1)
             with self.temporary_cuda(self.autoregressive) as ar:
                 auto_latent = ar.get_conditioning(auto_conds)
@@ -527,15 +529,13 @@ class Tortoise(BaseTTS):
             text, config, voice_samples=voice_samples, conditioning_latents=conditioning_latents, **kwargs
         )
 
-        return_dict = {
+        return {
             "wav": outputs["wav"],
             "deterministic_seed": outputs["deterministic_seed"],
             "text_inputs": outputs["text"],
             "voice_samples": outputs["voice_samples"],
             "conditioning_latents": outputs["conditioning_latents"],
         }
-
-        return return_dict
 
     def inference_with_config(self, text, config, **kwargs):
         """
@@ -590,7 +590,7 @@ class Tortoise(BaseTTS):
             },
         }
         if "preset" in kwargs:
-            settings.update(presets[kwargs["preset"]])
+            settings |= presets[kwargs["preset"]]
             kwargs.pop("preset")
         settings.update(kwargs)  # allow overriding of preset settings with kwargs
         return self.inference(text, **settings)
@@ -810,11 +810,7 @@ class Tortoise(BaseTTS):
 
             wav_candidates = [potentially_redact(wav_candidate, text) for wav_candidate in wav_candidates]
 
-            if len(wav_candidates) > 1:
-                res = wav_candidates
-            else:
-                res = wav_candidates[0]
-
+            res = wav_candidates if len(wav_candidates) > 1 else wav_candidates[0]
         return_dict = {
             "wav": res,
             "deterministic_seed": None,

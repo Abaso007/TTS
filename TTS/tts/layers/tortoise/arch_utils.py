@@ -39,7 +39,7 @@ def normalization(channels):
     elif channels <= 64:
         groups = 16
     while channels % groups != 0:
-        groups = int(groups / 2)
+        groups //= 2
     assert groups > 2
     return GroupNorm32(groups, channels)
 
@@ -267,21 +267,22 @@ class AudioMiniEncoder(nn.Module):
         self.init = nn.Sequential(nn.Conv1d(spec_dim, base_channels, 3, padding=1))
         ch = base_channels
         res = []
-        for l in range(depth):
-            for r in range(resnet_blocks):
-                res.append(ResBlock(ch, dropout, kernel_size=kernel_size))
+        for _ in range(depth):
+            res.extend(
+                ResBlock(ch, dropout, kernel_size=kernel_size)
+                for _ in range(resnet_blocks)
+            )
             res.append(Downsample(ch, use_conv=True, out_channels=ch * 2, factor=downsample_factor))
             ch *= 2
         self.res = nn.Sequential(*res)
         self.final = nn.Sequential(normalization(ch), nn.SiLU(), nn.Conv1d(ch, embedding_dim, 1))
-        attn = []
-        for a in range(attn_blocks):
-            attn.append(
-                AttentionBlock(
-                    embedding_dim,
-                    num_attn_heads,
-                )
+        attn = [
+            AttentionBlock(
+                embedding_dim,
+                num_attn_heads,
             )
+            for _ in range(attn_blocks)
+        ]
         self.attn = nn.Sequential(*attn)
         self.dim = embedding_dim
 
@@ -364,7 +365,7 @@ class CheckpointedLayer(nn.Module):
         self.wrap = wrap
 
     def forward(self, x, *args, **kwargs):
-        for k, v in kwargs.items():
+        for v in kwargs.values():
             assert not (isinstance(v, torch.Tensor) and v.requires_grad)  # This would screw up checkpointing.
         partial = functools.partial(self.wrap, **kwargs)
         return partial(x, *args)

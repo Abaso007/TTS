@@ -17,7 +17,7 @@ def load_wav_to_torch(full_path):
         norm_fix = 2**31
     elif data.dtype == np.int16:
         norm_fix = 2**15
-    elif data.dtype == np.float16 or data.dtype == np.float32:
+    elif data.dtype in [np.float16, np.float32]:
         norm_fix = 1.0
     else:
         raise NotImplementedError(f"Provided data dtype not supported: {data.dtype}")
@@ -33,9 +33,9 @@ def check_audio(audio, audiopath: str):
 
 
 def read_audio_file(audiopath: str):
-    if audiopath[-4:] == ".wav":
+    if audiopath.endswith(".wav"):
         audio, lsr = load_wav_to_torch(audiopath)
-    elif audiopath[-4:] == ".mp3":
+    elif audiopath.endswith(".mp3"):
         audio, lsr = librosa.load(audiopath, sr=None)
         audio = torch.FloatTensor(audio)
     else:
@@ -122,12 +122,11 @@ def load_voice(voice: str, extra_voice_dirs: List[str] = []):
     paths = voices[voice]
     if len(paths) == 1 and paths[0].endswith(".pth"):
         return None, torch.load(paths[0])
-    else:
-        conds = []
-        for cond_path in paths:
-            c = load_required_audio(cond_path)
-            conds.append(c)
-        return conds, None
+    conds = []
+    for cond_path in paths:
+        c = load_required_audio(cond_path)
+        conds.append(c)
+    return conds, None
 
 
 def load_voices(voices: List[str], extra_voice_dirs: List[str] = []):
@@ -141,21 +140,20 @@ def load_voices(voices: List[str], extra_voice_dirs: List[str] = []):
         clip, latent = load_voice(voice, extra_voice_dirs)
         if latent is None:
             assert (
-                len(latents) == 0
+                not latents
             ), "Can only combine raw audio voices or latent voices, not both. Do it yourself if you want this."
             clips.extend(clip)
         elif clip is None:
             assert (
-                len(clips) == 0
+                not clips
             ), "Can only combine raw audio voices or latent voices, not both. Do it yourself if you want this."
             latents.append(latent)
-    if len(latents) == 0:
+    if not latents:
         return clips, None
-    else:
-        latents_0 = torch.stack([l[0] for l in latents], dim=0).mean(dim=0)
-        latents_1 = torch.stack([l[1] for l in latents], dim=0).mean(dim=0)
-        latents = (latents_0, latents_1)
-        return None, latents
+    latents_0 = torch.stack([l[0] for l in latents], dim=0).mean(dim=0)
+    latents_1 = torch.stack([l[1] for l in latents], dim=0).mean(dim=0)
+    latents = (latents_0, latents_1)
+    return None, latents
 
 
 def wav_to_univnet_mel(wav, do_normalization=False, device="cuda"):

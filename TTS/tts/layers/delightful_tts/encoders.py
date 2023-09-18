@@ -13,8 +13,7 @@ def get_mask_from_lengths(lengths: torch.Tensor) -> torch.Tensor:
     batch_size = lengths.shape[0]
     max_len = torch.max(lengths).item()
     ids = torch.arange(0, max_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
-    mask = ids >= lengths.unsqueeze(1).expand(-1, max_len)
-    return mask
+    return ids >= lengths.unsqueeze(1).expand(-1, max_len)
 
 
 def stride_lens(lens: torch.Tensor, stride: int = 2) -> torch.Tensor:
