@@ -84,7 +84,7 @@ class Bark(BaseTTS):
         Returns:
             numpy semantic array to be fed into `semantic_to_waveform`
         """
-        x_semantic = generate_text_semantic(
+        return generate_text_semantic(
             text,
             self,
             history_prompt=history_prompt,
@@ -93,7 +93,6 @@ class Bark(BaseTTS):
             allow_early_stop=allow_early_stop,
             **kwargs,
         )
-        return x_semantic
 
     def semantic_to_waveform(
         self,
@@ -176,7 +175,7 @@ class Bark(BaseTTS):
             try:
                 _ = load_voice(speaker_id, voice_dirs)
             except (KeyError, FileNotFoundError):
-                output_path = os.path.join(voice_dir, speaker_id + ".npz")
+                output_path = os.path.join(voice_dir, f"{speaker_id}.npz")
                 os.makedirs(voice_dir, exist_ok=True)
                 generate_voice(audio, self, output_path)
 
@@ -196,7 +195,7 @@ class Bark(BaseTTS):
     # TODO: remove config from synthesize
     def synthesize(
         self, text, config, speaker_id="random", voice_dirs=None, **kwargs
-    ):  # pylint: disable=unused-argument
+    ):    # pylint: disable=unused-argument
         """Synthesize speech with the given input text.
 
         Args:
@@ -218,12 +217,10 @@ class Bark(BaseTTS):
         voice_dirs = self._set_voice_dirs(voice_dirs)
         history_prompt = load_voice(self, speaker_id, voice_dirs)
         outputs = self.generate_audio(text, history_prompt=history_prompt, **kwargs)
-        return_dict = {
+        return {
             "wav": outputs[0],
             "text_inputs": text,
         }
-
-        return return_dict
 
     def eval_step(self):
         ...

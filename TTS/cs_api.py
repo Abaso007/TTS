@@ -179,38 +179,27 @@ class CS_API:
 
     @staticmethod
     def _create_payload(model, text, speaker, speed, emotion, language):
-        payload = {}
-        # if speaker.is_voice:
-        payload["voice_id"] = speaker.id
-        # else:
-        payload["speaker_id"] = speaker.id
-
+        payload = {"voice_id": speaker.id, "speaker_id": speaker.id}
         if model == "V1":
-            payload.update(
-                {
-                    "emotion": emotion,
-                    "name": speaker.name,
-                    "text": text,
-                    "speed": speed,
-                }
-            )
+            payload |= {
+                "emotion": emotion,
+                "name": speaker.name,
+                "text": text,
+                "speed": speed,
+            }
         elif model == "XTTS":
-            payload.update(
-                {
-                    "name": speaker.name,
-                    "text": text,
-                    "speed": speed,
-                }
-            )
+            payload |= {
+                "name": speaker.name,
+                "text": text,
+                "speed": speed,
+            }
         elif model == "XTTS-multilang":
-            payload.update(
-                {
-                    "name": speaker.name,
-                    "text": text,
-                    "speed": speed,
-                    "language": language,
-                }
-            )
+            payload |= {
+                "name": speaker.name,
+                "text": text,
+                "speed": speed,
+                "language": language,
+            }
         else:
             raise ValueError(f"❗ Unknown model {model}")
         return payload
@@ -223,10 +212,14 @@ class CS_API:
                 emotion = "Neutral"
             assert language is None, "❗ language is not supported for V1 model."
         elif self.model == "XTTS":
-            assert emotion is None, f"❗ Emotions are not supported for XTTS model. Use V1 model."
+            assert (
+                emotion is None
+            ), "❗ Emotions are not supported for XTTS model. Use V1 model."
             assert language is None, "❗ Language is not supported for XTTS model. Use XTTS-multilang model."
         elif self.model == "XTTS-multilang":
-            assert emotion is None, f"❗ Emotions are not supported for XTTS-multilang model. Use V1 model."
+            assert (
+                emotion is None
+            ), "❗ Emotions are not supported for XTTS-multilang model. Use V1 model."
             assert language is not None, "❗ Language is required for XTTS-multilang model."
             assert (
                 language in self.SUPPORTED_LANGUAGES

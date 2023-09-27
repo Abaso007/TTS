@@ -352,8 +352,7 @@ class Xtts(BaseTTS):
         if self.lazy_load:
             yield model
         else:
-            m = model.to(self.device)
-            yield m
+            yield model.to(self.device)
             m = model.cpu()
 
     def get_gpt_cond_latents(self, audio_path: str, length: int = 3):
@@ -434,7 +433,6 @@ class Xtts(BaseTTS):
         assert (
             language in self.config.languages
         ), f" ❗ Language {language} is not supported. Supported languages are {self.config.languages}"
-        # Use generally found best tuning knobs for generation.
         settings = {
             "temperature": config.temperature,
             "length_penalty": config.length_penalty,
@@ -445,8 +443,7 @@ class Xtts(BaseTTS):
             "diffusion_temperature": config.diffusion_temperature,
             "decoder_iterations": config.decoder_iterations,
             "decoder_sampler": config.decoder_sampler,
-        }
-        settings.update(kwargs)  # allow overriding of preset settings with kwargs
+        } | kwargs
         return self.inference(text, ref_audio_path, language, **settings)
 
     @torch.no_grad()

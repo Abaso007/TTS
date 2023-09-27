@@ -400,13 +400,12 @@ class XTTSGPTEncoder(nn.Module):
         first_logits = enc[:, : first_inputs.shape[1]]
         first_logits = first_head(first_logits)
         first_logits = first_logits.permute(0, 2, 1)
-        if second_inputs is not None:
-            second_logits = enc[:, -second_inputs.shape[1] :]
-            second_logits = second_head(second_logits)
-            second_logits = second_logits.permute(0, 2, 1)
-            return first_logits, second_logits
-        else:
+        if second_inputs is None:
             return first_logits
+        second_logits = enc[:, -second_inputs.shape[1] :]
+        second_logits = second_head(second_logits)
+        second_logits = second_logits.permute(0, 2, 1)
+        return first_logits, second_logits
 
     def get_conditioning(self, speech_conditioning_input):
         speech_conditioning_input = (
@@ -414,9 +413,10 @@ class XTTSGPTEncoder(nn.Module):
             if len(speech_conditioning_input.shape) == 3
             else speech_conditioning_input
         )
-        conds = []
-        for j in range(speech_conditioning_input.shape[1]):
-            conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+        conds = [
+            self.conditioning_encoder(speech_conditioning_input[:, j])
+            for j in range(speech_conditioning_input.shape[1])
+        ]
         conds = torch.stack(conds, dim=1)
         conds = conds.mean(dim=1)
         return conds
@@ -480,7 +480,11 @@ class XTTSGPTEncoder(nn.Module):
         # Compute speech conditioning input
         conds = None
         if speech_conditioning_input is not None:
-            if not return_latent:
+            if return_latent:
+                # already computed
+                conds = speech_conditioning_input.unsqueeze(1)
+
+            else:
                 # Compute speech conditioning input
                 speech_conditioning_input = (
                     speech_conditioning_input.unsqueeze(1)
@@ -488,16 +492,13 @@ class XTTSGPTEncoder(nn.Module):
                     else speech_conditioning_input
                 )
 
-                conds = []
-                for j in range(speech_conditioning_input.shape[1]):
-                    conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+                conds = [
+                    self.conditioning_encoder(speech_conditioning_input[:, j])
+                    for j in range(speech_conditioning_input.shape[1])
+                ]
                 conds = torch.stack(conds, dim=1)
                 if self.average_conditioning_embeddings:
                     conds = conds.mean(dim=1).unsqueeze(1)
-            else:
-                # already computed
-                conds = speech_conditioning_input.unsqueeze(1)
-
         # Build input and target tensors
         # Prepend start token to inputs and append stop token to targets
         text_inputs, _ = self.set_inputs_and_targets(text_inputs, self.start_text_token, self.stop_text_token)
@@ -542,10 +543,7 @@ class XTTSGPTEncoder(nn.Module):
         # dropout prompt embeddings
         prompt_emb = F.dropout(prompt_emb, p=0.1, training=self.training)
 
-        # Get logits
-        sub = -4  # don't ask me why 😄
-        if self.training:
-            sub = -1
+        sub = -1 if self.training else -4
         _, audio_logits = self.get_logits(
             conds,
             text_emb,

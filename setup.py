@@ -33,7 +33,9 @@ from setuptools import Extension, find_packages, setup
 
 python_version = sys.version.split()[0]
 if Version(python_version) < Version("3.9") or Version(python_version) >= Version("3.12"):
-    raise RuntimeError("TTS requires python >= 3.9 and < 3.12 " "but your Python version is {}".format(sys.version))
+    raise RuntimeError(
+        f"TTS requires python >= 3.9 and < 3.12 but your Python version is {sys.version}"
+    )
 
 
 cwd = os.path.dirname(os.path.abspath(__file__))

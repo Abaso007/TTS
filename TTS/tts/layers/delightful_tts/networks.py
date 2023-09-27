@@ -141,8 +141,7 @@ class EmbeddingPadded(nn.Module):
 
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
         embeddings_zeroed = self.embeddings * self.padding_mult
-        x = F.embedding(idx, embeddings_zeroed)
-        return x
+        return F.embedding(idx, embeddings_zeroed)
 
 
 class EmbeddingProjBlock(nn.Module):
@@ -213,7 +212,4 @@ class STL(nn.Module):
 
         keys_soft = torch.tanh(self.embed).unsqueeze(0).expand(N, -1, -1)  # [N, token_num, E // num_heads]
 
-        # Weighted sum
-        emotion_embed_soft = self.attention(query, keys_soft)
-
-        return emotion_embed_soft
+        return self.attention(query, keys_soft)

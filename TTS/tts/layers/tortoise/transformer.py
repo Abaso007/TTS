@@ -31,7 +31,7 @@ def stable_softmax(t, dim=-1, alpha=32**2):
 
 
 def route_args(router, args, depth):
-    routed_args = [(dict(), dict()) for _ in range(depth)]
+    routed_args = [({}, {}) for _ in range(depth)]
     matched_keys = [key for key in args.keys() if key in router]
 
     for key in matched_keys:
@@ -79,7 +79,7 @@ class LayerScale(nn.Module):
         super().__init__()
         if depth <= 18:
             init_eps = 0.1
-        elif depth > 18 and depth <= 24:
+        elif depth <= 24:
             init_eps = 1e-5
         else:
             init_eps = 1e-6

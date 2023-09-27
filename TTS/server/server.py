@@ -142,8 +142,7 @@ def style_wav_uri_to_dict(style_wav: str) -> Union[str, dict]:
         if os.path.isfile(style_wav) and style_wav.endswith(".wav"):
             return style_wav  # style_wav is a .wav file located on the server
 
-        style_wav = json.loads(style_wav)
-        return style_wav  # style_wav is a gst dictionary with {token1_id : token1_weigth, ...}
+        return json.loads(style_wav)
     return None
 
 
@@ -164,18 +163,16 @@ def index():
 def details():
     if args.config_path is not None and os.path.isfile(args.config_path):
         model_config = load_config(args.config_path)
-    else:
-        if args.model_name is not None:
-            model_config = load_config(config_path)
+    elif args.model_name is not None:
+        model_config = load_config(config_path)
 
     if args.vocoder_config_path is not None and os.path.isfile(args.vocoder_config_path):
         vocoder_config = load_config(args.vocoder_config_path)
-    else:
-        if args.vocoder_name is not None:
-            vocoder_config = load_config(vocoder_config_path)
-        else:
-            vocoder_config = None
+    elif args.vocoder_name is None:
+        vocoder_config = None
 
+    else:
+        vocoder_config = load_config(vocoder_config_path)
     return render_template(
         "details.html",
         show_details=args.show_details,

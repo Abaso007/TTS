@@ -236,8 +236,7 @@ class BSConv1d(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x1 = self.pointwise(x)
-        x2 = self.depthwise(x1)
-        return x2
+        return self.depthwise(x1)
 
 
 class BSConv2d(nn.Module):
@@ -256,8 +255,7 @@ class BSConv2d(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x1 = self.pointwise(x)
-        x2 = self.depthwise(x1)
-        return x2
+        return self.depthwise(x1)
 
 
 class Conv1dGLU(nn.Module):
@@ -283,8 +281,7 @@ class Conv1dGLU(nn.Module):
         x = a * torch.sigmoid(b)
         x = x + residual
         x = x * self.sqrt
-        x = x.permute((0, 2, 1))
-        return x
+        return x.permute((0, 2, 1))
 
 
 class ConvTransposed(nn.Module):

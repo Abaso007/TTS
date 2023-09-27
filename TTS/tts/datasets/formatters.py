@@ -169,7 +169,7 @@ def mailabs(root_path, meta_files=None, ignored_speakers=None):
         if isinstance(ignored_speakers, list):
             if speaker_name in ignored_speakers:
                 continue
-        print(" | > {}".format(csv_file))
+        print(f" | > {csv_file}")
         with open(txt_file, "r", encoding="utf-8") as ttf:
             for line in ttf:
                 cols = line.split("|")
@@ -184,7 +184,7 @@ def mailabs(root_path, meta_files=None, ignored_speakers=None):
                     )
                 else:
                     # M-AI-Labs have some missing samples, so just print the warning
-                    print("> File %s does not exist!" % (wav_file))
+                    print(f"> File {wav_file} does not exist!")
     return items
 
 
@@ -325,9 +325,8 @@ def libri_tts(root_path, meta_files=None, ignored_speakers=None):
     items = []
     if not meta_files:
         meta_files = glob(f"{root_path}/**/*trans.tsv", recursive=True)
-    else:
-        if isinstance(meta_files, str):
-            meta_files = [os.path.join(root_path, meta_files)]
+    elif isinstance(meta_files, str):
+        meta_files = [os.path.join(root_path, meta_files)]
 
     for meta_file in meta_files:
         _meta_file = os.path.basename(meta_file).split(".")[0]

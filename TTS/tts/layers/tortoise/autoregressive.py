@@ -171,10 +171,11 @@ class ConditioningEncoder(nn.Module):
         mean=False,
     ):
         super().__init__()
-        attn = []
         self.init = nn.Conv1d(spec_dim, embedding_dim, kernel_size=1)
-        for a in range(attn_blocks):
-            attn.append(AttentionBlock(embedding_dim, num_attn_heads))
+        attn = [
+            AttentionBlock(embedding_dim, num_attn_heads)
+            for _ in range(attn_blocks)
+        ]
         self.attn = nn.Sequential(*attn)
         self.dim = embedding_dim
         self.do_checkpointing = do_checkpointing
@@ -183,10 +184,7 @@ class ConditioningEncoder(nn.Module):
     def forward(self, x):
         h = self.init(x)
         h = self.attn(h)
-        if self.mean:
-            return h.mean(dim=2)
-        else:
-            return h[:, :, 0]
+        return h.mean(dim=2) if self.mean else h[:, :, 0]
 
 
 class LearnedPositionEmbeddings(nn.Module):
@@ -445,9 +443,10 @@ class UnifiedVoice(nn.Module):
             if len(speech_conditioning_input.shape) == 3
             else speech_conditioning_input
         )
-        conds = []
-        for j in range(speech_conditioning_input.shape[1]):
-            conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+        conds = [
+            self.conditioning_encoder(speech_conditioning_input[:, j])
+            for j in range(speech_conditioning_input.shape[1])
+        ]
         conds = torch.stack(conds, dim=1)
         conds = conds.mean(dim=1)
         return conds
@@ -506,10 +505,7 @@ class UnifiedVoice(nn.Module):
         mel_codes, mel_targets = self.build_aligned_inputs_and_targets(
             mel_codes, self.start_mel_token, self.stop_mel_token
         )
-        if raw_mels is not None:
-            mel_inp = F.pad(raw_mels, (0, 8))
-        else:
-            mel_inp = mel_codes
+        mel_inp = F.pad(raw_mels, (0, 8)) if raw_mels is not None else mel_codes
         mel_emb = self.mel_embedding(mel_inp)
         mel_emb = mel_emb + self.mel_pos_embedding(mel_codes)
 

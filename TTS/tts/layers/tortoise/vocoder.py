@@ -366,8 +366,7 @@ class UnivNetGenerator(nn.Module):
 
         audio = self.forward(mel, z)
         audio = audio[:, :, : -(self.hop_length * 10)]
-        audio = audio.clamp(min=-1, max=1)
-        return audio
+        return audio.clamp(min=-1, max=1)
 
 
 @dataclass
@@ -377,9 +376,7 @@ class VocType:
     subkey: Optional[str] = None
 
     def optionally_index(self, model_dict):
-        if self.subkey is not None:
-            return model_dict[self.subkey]
-        return model_dict
+        return model_dict[self.subkey] if self.subkey is not None else model_dict
 
 
 class VocConf(Enum):

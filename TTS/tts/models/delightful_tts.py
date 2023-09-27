@@ -41,9 +41,7 @@ def id_to_torch(aux_id, cuda=False):
     if aux_id is not None:
         aux_id = np.asarray(aux_id)
         aux_id = torch.from_numpy(aux_id)
-    if cuda:
-        return aux_id.cuda()
-    return aux_id
+    return aux_id.cuda() if cuda else aux_id
 
 
 def embedding_to_torch(d_vector, cuda=False):
@@ -51,26 +49,21 @@ def embedding_to_torch(d_vector, cuda=False):
         d_vector = np.asarray(d_vector)
         d_vector = torch.from_numpy(d_vector).float()
         d_vector = d_vector.squeeze().unsqueeze(0)
-    if cuda:
-        return d_vector.cuda()
-    return d_vector
+    return d_vector.cuda() if cuda else d_vector
 
 
 def numpy_to_torch(np_array, dtype, cuda=False):
     if np_array is None:
         return None
     tensor = torch.as_tensor(np_array, dtype=dtype)
-    if cuda:
-        return tensor.cuda()
-    return tensor
+    return tensor.cuda() if cuda else tensor
 
 
 def get_mask_from_lengths(lengths: torch.Tensor) -> torch.Tensor:
     batch_size = lengths.shape[0]
     max_len = torch.max(lengths).item()
     ids = torch.arange(0, max_len, device=lengths.device).unsqueeze(0).expand(batch_size, -1)
-    mask = ids >= lengths.unsqueeze(1).expand(-1, max_len)
-    return mask
+    return ids >= lengths.unsqueeze(1).expand(-1, max_len)
 
 
 def pad(input_ele: List[torch.Tensor], max_len: int) -> torch.Tensor:
@@ -81,8 +74,7 @@ def pad(input_ele: List[torch.Tensor], max_len: int) -> torch.Tensor:
         else:
             one_batch_padded = F.pad(batch, (0, 0, 0, max_len - batch.size(0)), "constant", 0.0)
         out_list.append(one_batch_padded)
-    out_padded = torch.stack(out_list)
-    return out_padded
+    return torch.stack(out_list)
 
 
 def init_weights(m: nn.Module, mean: float = 0.0, std: float = 0.01):
@@ -149,13 +141,11 @@ def _db_to_amp(x, C=1):
 
 
 def amp_to_db(magnitudes):
-    output = _amp_to_db(magnitudes)
-    return output
+    return _amp_to_db(magnitudes)
 
 
 def db_to_amp(magnitudes):
-    output = _db_to_amp(magnitudes)
-    return output
+    return _db_to_amp(magnitudes)
 
 
 def _wav_to_spec(y, n_fft, hop_length, win_length, center=False):
@@ -167,8 +157,8 @@ def _wav_to_spec(y, n_fft, hop_length, win_length, center=False):
         print("max value is ", torch.max(y))
 
     global hann_window  # pylint: disable=global-statement
-    dtype_device = str(y.dtype) + "_" + str(y.device)
-    wnsize_dtype_device = str(win_length) + "_" + dtype_device
+    dtype_device = f"{str(y.dtype)}_{str(y.device)}"
+    wnsize_dtype_device = f"{str(win_length)}_{dtype_device}"
     if wnsize_dtype_device not in hann_window:
         hann_window[wnsize_dtype_device] = torch.hann_window(win_length).to(dtype=y.dtype, device=y.device)
 
@@ -179,7 +169,7 @@ def _wav_to_spec(y, n_fft, hop_length, win_length, center=False):
     )
     y = y.squeeze(1)
 
-    spec = torch.stft(
+    return torch.stft(
         y,
         n_fft,
         hop_length=hop_length,
@@ -191,8 +181,6 @@ def _wav_to_spec(y, n_fft, hop_length, win_length, center=False):
         onesided=True,
         return_complex=False,
     )
-
-    return spec
 
 
 def wav_to_spec(y, n_fft, hop_length, win_length, center=False):
@@ -216,8 +204,7 @@ def wav_to_energy(y, n_fft, hop_length, win_length, center=False):
 
 
 def name_mel_basis(spec, n_fft, fmax):
-    n_fft_len = f"{n_fft}_{fmax}_{spec.dtype}_{spec.device}"
-    return n_fft_len
+    return f"{n_fft}_{fmax}_{spec.dtype}_{spec.device}"
 
 
 def spec_to_mel(spec, n_fft, num_mels, sample_rate, fmin, fmax):
@@ -257,7 +244,7 @@ def wav_to_mel(y, n_fft, num_mels, sample_rate, hop_length, win_length, fmin, fm
 
     global mel_basis, hann_window  # pylint: disable=global-statement
     mel_basis_key = name_mel_basis(y, n_fft, fmax)
-    wnsize_dtype_device = str(win_length) + "_" + str(y.dtype) + "_" + str(y.device)
+    wnsize_dtype_device = f"{str(win_length)}_{str(y.dtype)}_{str(y.device)}"
     if mel_basis_key not in mel_basis:
         # pylint: disable=missing-kwoa
         mel = librosa_mel_fn(
@@ -407,10 +394,7 @@ class ForwardTTSE2eDataset(TTSDataset):
             print(idx, item)
             # pylint: disable=raise-missing-from
             raise OSError
-        f0 = None
-        if self.compute_f0:
-            f0 = self.get_f0(idx)["f0"]
-
+        f0 = self.get_f0(idx)["f0"] if self.compute_f0 else None
         # after phonemization the text length may change
         # this is a shameful 🤭 hack to prevent longer phonemes
         # TODO: find a better fix
@@ -438,15 +422,13 @@ class ForwardTTSE2eDataset(TTSDataset):
     def load_or_compute_attn_prior(self, token_ids, wav, rel_wav_path):
         """Load or compute and save the attention prior."""
         attn_prior_file = os.path.join(self.attn_prior_cache_path, f"{rel_wav_path}.npy")
-        # pylint: disable=no-else-return
         if os.path.exists(attn_prior_file):
             return np.load(attn_prior_file)
-        else:
-            token_len = len(token_ids)
-            mel_len = wav.shape[1] // self.ap.hop_length
-            attn_prior = compute_attn_prior(token_len, mel_len)
-            np.save(attn_prior_file, attn_prior)
-            return attn_prior
+        token_len = len(token_ids)
+        mel_len = wav.shape[1] // self.ap.hop_length
+        attn_prior = compute_attn_prior(token_len, mel_len)
+        np.save(attn_prior_file, attn_prior)
+        return attn_prior
 
     @property
     def lengths(self):
@@ -476,7 +458,7 @@ class ForwardTTSE2eDataset(TTSDataset):
         B = len(batch)
         batch = {k: [dic[k] for dic in batch] for k in batch[0]}
 
-        max_text_len = max([len(x) for x in batch["token_ids"]])
+        max_text_len = max(len(x) for x in batch["token_ids"])
         token_lens = torch.LongTensor(batch["token_len"])
         token_rel_lens = token_lens / token_lens.max()
 
@@ -875,12 +857,13 @@ class DelightfulTTS(BaseTTSE2E):
             self.args.spec_segment_size * self.ap.hop_length,
             pad_short=True,
         )
-        model_outputs = {**encoder_outputs}
-        model_outputs["acoustic_model_outputs"] = encoder_outputs["model_outputs"]
-        model_outputs["model_outputs"] = vocoder_output
-        model_outputs["waveform_seg"] = wav_seg
-        model_outputs["slice_ids"] = slice_ids
-        return model_outputs
+        return {
+            **encoder_outputs,
+            "acoustic_model_outputs": encoder_outputs["model_outputs"],
+            "model_outputs": vocoder_output,
+            "waveform_seg": wav_seg,
+            "slice_ids": slice_ids,
+        }
 
     @torch.no_grad()
     def inference(
@@ -902,9 +885,7 @@ class DelightfulTTS(BaseTTSE2E):
             g = None
 
         vocoder_output = self.waveform_decoder(x=vocoder_input, g=g)
-        model_outputs = {**encoder_outputs}
-        model_outputs["model_outputs"] = vocoder_output
-        return model_outputs
+        return {**encoder_outputs, "model_outputs": vocoder_output}
 
     @torch.no_grad()
     def inference_spec_decoder(self, x, aux_input={"d_vectors": None, "speaker_ids": None}):
@@ -913,8 +894,7 @@ class DelightfulTTS(BaseTTSE2E):
             d_vectors=aux_input["d_vectors"],
             speaker_idx=aux_input["speaker_ids"],
         )
-        model_outputs = {**encoder_outputs}
-        return model_outputs
+        return {**encoder_outputs}
 
     def train_step(self, batch: dict, criterion: nn.Module, optimizer_idx: int):
         if optimizer_idx == 0:
@@ -1063,7 +1043,7 @@ class DelightfulTTS(BaseTTSE2E):
             "pitch_ground_truth": plot_avg_pitch(pitch_avg, chars, output_fig=False),
             "pitch_avg_predicted": plot_avg_pitch(pitch_avg_hat, chars, output_fig=False),
         }
-        figures.update(pitch_figures)
+        figures |= pitch_figures
 
         # plot energy figures
         energy_avg = abs(outputs[1]["energy_target"][0, 0].data.cpu().numpy())
@@ -1073,7 +1053,7 @@ class DelightfulTTS(BaseTTSE2E):
             "energy_ground_truth": plot_avg_pitch(energy_avg, chars, output_fig=False),
             "energy_avg_predicted": plot_avg_pitch(energy_avg_hat, chars, output_fig=False),
         }
-        figures.update(energy_figures)
+        figures |= energy_figures
 
         # plot the attention mask computed from the predicted durations
         alignments_hat = outputs[1]["alignments_dp"][0].data.cpu().numpy()
@@ -1090,7 +1070,7 @@ class DelightfulTTS(BaseTTSE2E):
         y = outputs[1]["waveform_seg"]
 
         vocoder_figures = plot_results(y_hat=y_hat, y=y, ap=self.ap, name_prefix=name_prefix)
-        figures.update(vocoder_figures)
+        figures |= vocoder_figures
 
         sample_voice = y_hat[0].squeeze(0).detach().cpu().numpy()
         audios[f"{name_prefix}/vocoder_audio"] = sample_voice
@@ -1121,11 +1101,6 @@ class DelightfulTTS(BaseTTSE2E):
         logger.eval_audios(steps, audios, self.ap.sample_rate)
 
     def get_aux_input_from_test_sentences(self, sentence_info):
-        if hasattr(self.config, "model_args"):
-            config = self.config.model_args
-        else:
-            config = self.config
-
         # extract speaker and language info
         text, speaker_name, style_wav = None, None, None
 
@@ -1142,6 +1117,11 @@ class DelightfulTTS(BaseTTSE2E):
         # get speaker  id/d_vector
         speaker_id, d_vector = None, None
         if hasattr(self, "speaker_manager"):
+            config = (
+                self.config.model_args
+                if hasattr(self.config, "model_args")
+                else self.config
+            )
             if config.use_d_vector_file:
                 if speaker_name is None:
                     d_vector = self.speaker_manager.get_random_embedding()
@@ -1156,7 +1136,6 @@ class DelightfulTTS(BaseTTSE2E):
         return {"text": text, "speaker_id": speaker_id, "style_wav": style_wav, "d_vector": d_vector}
 
     def plot_outputs(self, text, wav, alignment, outputs):
-        figures = {}
         pitch_avg_pred = outputs["pitch"].cpu()
         energy_avg_pred = outputs["energy"].cpu()
         spec = wav_to_mel(
@@ -1181,7 +1160,11 @@ class DelightfulTTS(BaseTTSE2E):
         durations = outputs["durations"]
         pitch_avg = average_over_durations(torch.from_numpy(pitch)[None, None, :], durations.cpu())  # [1, 1, n_frames]
         pitch_avg_pred_denorm = (pitch_avg_pred * self.pitch_std) + self.pitch_mean
-        figures["alignment"] = plot_alignment(alignment.transpose(1, 2), output_fig=False)
+        figures = {
+            "alignment": plot_alignment(
+                alignment.transpose(1, 2), output_fig=False
+            )
+        }
         figures["spectrogram"] = plot_spectrogram(spec)
         figures["pitch_from_wav"] = plot_pitch(pitch, spec)
         figures["pitch_avg_from_wav"] = plot_avg_pitch(pitch_avg.squeeze(), input_text)
@@ -1209,7 +1192,7 @@ class DelightfulTTS(BaseTTSE2E):
         # set speaker inputs
         _speaker_id = None
         if speaker_id is not None and self.args.use_speaker_embedding:
-            if isinstance(speaker_id, str) and self.args.use_speaker_embedding:
+            if isinstance(speaker_id, str):
                 # get the speaker id for the speaker embedding layer
                 _speaker_id = self.speaker_manager.name_to_id[speaker_id]
                 _speaker_id = id_to_torch(_speaker_id, cuda=is_cuda)
@@ -1233,13 +1216,12 @@ class DelightfulTTS(BaseTTSE2E):
         # collect outputs
         wav = outputs["model_outputs"][0].data.cpu().numpy()
         alignments = outputs["alignments"]
-        return_dict = {
+        return {
             "wav": wav,
             "alignments": alignments,
             "text_inputs": text_inputs,
             "outputs": outputs,
         }
-        return return_dict
 
     def synthesize_with_gl(self, text: str, speaker_id, d_vector):
         is_cuda = next(self.parameters()).is_cuda
@@ -1270,13 +1252,12 @@ class DelightfulTTS(BaseTTSE2E):
         S = db_to_amp_numpy(x=S, gain=1, base=None)
         wav = mel_to_wav_numpy(mel=S, mel_basis=self.mel_basis, **self.config.audio)
         alignments = outputs["alignments"]
-        return_dict = {
+        return {
             "wav": wav[None, :],
             "alignments": alignments,
             "text_inputs": text_inputs,
             "outputs": outputs,
         }
-        return return_dict
 
     @torch.no_grad()
     def test_run(self, assets) -> Tuple[Dict, Dict]:
@@ -1305,9 +1286,11 @@ class DelightfulTTS(BaseTTSE2E):
                 d_vector=aux_inputs["d_vector"],
             )
             # speaker_name = self.speaker_manager.speaker_names[aux_inputs["speaker_id"]]
-            test_audios["{}-audio".format(idx)] = outputs["wav"].T
-            test_audios["{}-audio_encoder".format(idx)] = outputs_gl["wav"].T
-            test_figures["{}-alignment".format(idx)] = plot_alignment(outputs["alignments"], output_fig=False)
+            test_audios[f"{idx}-audio"] = outputs["wav"].T
+            test_audios[f"{idx}-audio_encoder"] = outputs_gl["wav"].T
+            test_figures[f"{idx}-alignment"] = plot_alignment(
+                outputs["alignments"], output_fig=False
+            )
         return {"figures": test_figures, "audios": test_audios}
 
     def test_log(

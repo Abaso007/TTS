@@ -187,10 +187,13 @@ class ConditioningEncoder(nn.Module):
         mean=False,
     ):
         super().__init__()
-        attn = []
         self.init = nn.Conv1d(spec_dim, embedding_dim, kernel_size=1)
-        for a in range(attn_blocks):
-            attn.append(AttentionBlock(embedding_dim, num_attn_heads, do_checkpoint=do_checkpointing))
+        attn = [
+            AttentionBlock(
+                embedding_dim, num_attn_heads, do_checkpoint=do_checkpointing
+            )
+            for _ in range(attn_blocks)
+        ]
         self.attn = nn.Sequential(*attn)
         self.dim = embedding_dim
         self.do_checkpointing = do_checkpointing
@@ -199,10 +202,7 @@ class ConditioningEncoder(nn.Module):
     def forward(self, x):
         h = self.init(x)
         h = self.attn(h)
-        if self.mean:
-            return h.mean(dim=2)
-        else:
-            return h[:, :, 0]
+        return h.mean(dim=2) if self.mean else h[:, :, 0]
 
 
 class LearnedPositionEmbeddings(nn.Module):
@@ -217,11 +217,10 @@ class LearnedPositionEmbeddings(nn.Module):
 
     def forward(self, x):
         sl = x.shape[1]
-        if self.relative:
-            start = random.randint(sl, self.seq_len) - sl
-            return self.emb(torch.arange(start, start + sl, device=x.device))
-        else:
+        if not self.relative:
             return self.emb(torch.arange(0, sl, device=x.device))
+        start = random.randint(sl, self.seq_len) - sl
+        return self.emb(torch.arange(start, start + sl, device=x.device))
 
     def get_fixed_embedding(self, ind, dev):
         return self.emb(torch.tensor([ind], device=dev)).unsqueeze(0)
@@ -557,13 +556,12 @@ class UnifiedVoice(nn.Module):
         first_logits = enc[:, : first_inputs.shape[1]]
         first_logits = first_head(first_logits)
         first_logits = first_logits.permute(0, 2, 1)
-        if second_inputs is not None:
-            second_logits = enc[:, -second_inputs.shape[1] :]
-            second_logits = second_head(second_logits)
-            second_logits = second_logits.permute(0, 2, 1)
-            return first_logits, second_logits
-        else:
+        if second_inputs is None:
             return first_logits
+        second_logits = enc[:, -second_inputs.shape[1] :]
+        second_logits = second_head(second_logits)
+        second_logits = second_logits.permute(0, 2, 1)
+        return first_logits, second_logits
 
     def get_conditioning(self, speech_conditioning_input):
         speech_conditioning_input = (
@@ -571,9 +569,10 @@ class UnifiedVoice(nn.Module):
             if len(speech_conditioning_input.shape) == 3
             else speech_conditioning_input
         )
-        conds = []
-        for j in range(speech_conditioning_input.shape[1]):
-            conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+        conds = [
+            self.conditioning_encoder(speech_conditioning_input[:, j])
+            for j in range(speech_conditioning_input.shape[1])
+        ]
         conds = torch.stack(conds, dim=1)
         conds = conds.mean(dim=1)
         return conds
@@ -585,9 +584,7 @@ class UnifiedVoice(nn.Module):
         """
         prompt = prompt_codes
         if self.training:
-            prompt_len = random.randint(1, 9)  # in secs
-            prompt_len = prompt_len * 24  # in frames
-
+            prompt_len = random.randint(1, 9) * 24
             if prompt_codes.shape[1] < prompt_len:
                 prompt_len = prompt_codes.shape[-1]
                 start = 0
@@ -699,7 +696,11 @@ class UnifiedVoice(nn.Module):
         # Compute speech conditioning input
         conds = None
         if speech_conditioning_input is not None:
-            if not return_latent:
+            if return_latent:
+                # already computed
+                conds = speech_conditioning_input.unsqueeze(1)
+
+            else:
                 # Compute speech conditioning input
                 speech_conditioning_input = (
                     speech_conditioning_input.unsqueeze(1)
@@ -707,16 +708,13 @@ class UnifiedVoice(nn.Module):
                     else speech_conditioning_input
                 )
 
-                conds = []
-                for j in range(speech_conditioning_input.shape[1]):
-                    conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+                conds = [
+                    self.conditioning_encoder(speech_conditioning_input[:, j])
+                    for j in range(speech_conditioning_input.shape[1])
+                ]
                 conds = torch.stack(conds, dim=1)
                 if self.average_conditioning_embeddings:
                     conds = conds.mean(dim=1).unsqueeze(1)
-            else:
-                # already computed
-                conds = speech_conditioning_input.unsqueeze(1)
-
         # Build input and target tensors
         # Prepend start token to inputs and append stop token to targets
         text_inputs, text_targets = self.build_aligned_inputs_and_targets(
@@ -761,10 +759,7 @@ class UnifiedVoice(nn.Module):
 
         prompt_emb = self.mel_embedding(prompt).detach() + self.mel_pos_embedding(prompt).detach()
 
-        # Get logits
-        sub = -4  # don't ask me why 😄
-        if self.training:
-            sub = -1
+        sub = -1 if self.training else -4
         text_logits, mel_logits = self.get_logits(
             conds,
             text_emb,
@@ -823,9 +818,10 @@ class UnifiedVoice(nn.Module):
             if len(speech_conditioning_input.shape) == 3
             else speech_conditioning_input
         )
-        conds = []
-        for j in range(speech_conditioning_input.shape[1]):
-            conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+        conds = [
+            self.conditioning_encoder(speech_conditioning_input[:, j])
+            for j in range(speech_conditioning_input.shape[1])
+        ]
         conds = torch.stack(conds, dim=1)
         if self.average_conditioning_embeddings:
             conds = conds.mean(dim=1).unsqueeze(1)
@@ -857,9 +853,10 @@ class UnifiedVoice(nn.Module):
             if len(speech_conditioning_input.shape) == 3
             else speech_conditioning_input
         )
-        conds = []
-        for j in range(speech_conditioning_input.shape[1]):
-            conds.append(self.conditioning_encoder(speech_conditioning_input[:, j]))
+        conds = [
+            self.conditioning_encoder(speech_conditioning_input[:, j])
+            for j in range(speech_conditioning_input.shape[1])
+        ]
         conds = torch.stack(conds, dim=1)
         if self.average_conditioning_embeddings:
             conds = conds.mean(dim=1).unsqueeze(1)
@@ -867,10 +864,7 @@ class UnifiedVoice(nn.Module):
         mel_codes, mel_targets = self.build_aligned_inputs_and_targets(
             mel_codes, self.start_mel_token, self.stop_mel_token
         )
-        if raw_mels is not None:
-            mel_inp = F.pad(raw_mels, (0, 4))
-        else:
-            mel_inp = mel_codes
+        mel_inp = F.pad(raw_mels, (0, 4)) if raw_mels is not None else mel_codes
         mel_emb = self.mel_embedding(mel_inp)
         mel_emb = mel_emb + self.mel_pos_embedding(mel_codes) + self.mel_solo_embedding
         mel_logits = self.get_logits(conds, mel_emb, self.mel_head)
@@ -995,13 +989,10 @@ class UnifiedVoice(nn.Module):
     def make_hf_generate_attentions_sane(self, attentions):
         layers = [[] for _ in range(len(attentions[0]))]
         full_attention_size = attentions[-1][0].shape[-1]
-        for i, gen in enumerate(attentions):
+        for gen in attentions:
             for j, lyr in enumerate(gen):
                 layers[j].append(F.pad(lyr, (0, full_attention_size - lyr.shape[-1])))
-        catted = []
-        for lyr in layers:
-            catted.append(torch.cat(lyr, dim=2))
-        return catted
+        return [torch.cat(lyr, dim=2) for lyr in layers]
 
     def convert_attentions_to_aligned_codes(self, text, attentions, codes, num_conds):
         """
@@ -1020,7 +1011,7 @@ class UnifiedVoice(nn.Module):
             dec_context[:, :, :, num_context:] = 0
             for h in range(dec_context.shape[1]):
                 dec_context_indices = torch.argmax(dec_context[0, h], dim=-1)
-                print(f"layer_{l};head_{h}: " + str(dec_context_indices))
+                print(f"layer_{l};head_{h}: {str(dec_context_indices)}")
         for t, att_tok in enumerate(attentions):
             combined_attention_weights = torch.zeros((codes.shape[0], num_text), device=codes.device)
             for lyr in att_tok:
